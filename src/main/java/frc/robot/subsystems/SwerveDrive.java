@@ -32,46 +32,63 @@ public class SwerveDrive extends SubsystemBase {
     this.backLeft = backLeft;
     this.frontRight = frontRight;
     this.frontLeft = frontLeft;
+    this.inputScaler = new SwerveDriveInputScaler();
   }
 
-  public void drive(double x1, double y1, double x2, boolean slowMode2) {
-    // double r = Math.sqrt ((L * L) + (W * W));
-    boolean isForward = true;
-    y1 *= -1;
+  public void drive(double strafeInput, double forwardInput, double omegaInput, boolean slowMode) {
+    
+    // Your robot's wheelbase dimensions (length L and width W)
+    double L = 10; // Replace with actual length
+    double W = 10; // Replace with actual width
 
-    double dx1 = deadzone(x1, 0.2);
-    double dx2 = deadzone(x2, 0.2) * Constants.scalarSwerve;
-    double dy1 = deadzone(y1, 0.2);
-    double a = dx1 - dx2 * (L / Constants.OperatorConstants.drive_r);
-    double b = dx1 + dx2 * (L / Constants.OperatorConstants.drive_r);
-    double c = dy1 - dx2 * (W / Constants.OperatorConstants.drive_r);
-    double d = dy1 + dx2 * (W / Constants.OperatorConstants.drive_r);
+    // TODO: Commenting out for now, may need to bring back later.
+    //boolean isForward = true;
+    //forwardInput *= -1;
 
-    // double magnitude = deadzone(Math.hypot(x1, y1)*0.9, 0.05);
-    // double angle = Math.atan2(x1,y1);
-    double backRightSpeed = Math.sqrt((a * a) + (d * d));
-    double backLeftSpeed = Math.sqrt((a * a) + (c * c));
-    double frontRightSpeed = Math.sqrt((b * b) + (d * d));
-    double frontLeftSpeed = Math.sqrt((b * b) + (c * c));
+    // TODO: Will need to tune this.
+    double strafeInputDz = deadzone(strafeInput, 0.2);
+    double omegaInputDz = deadzone(omegaInput, 0.2) * Constants.scalarSwerve;
+    double forwardInputDz = deadzone(forwardInput, 0.2);
 
-    backRightAngle = (Math.atan2(a, c) / Math.PI) * 180;
-    backLeftAngle = (Math.atan2(a, d) / Math.PI) * 180;
-    frontRightAngle = (Math.atan2(b, c) / Math.PI) * 180;
-    frontLeftAngle = (Math.atan2(b, d) / Math.PI) * 180;
+    // Scale the inputs
+    double[] scaledInputs = inputScaler.scaleInputs(strafeInputDz, forwardInputDz, omegaInputDz);
+    double scaledStrafe = scaledInputs[0];
+    double scaledForward = scaledInputs[1];
+    double scaledOmega = scaledInputs[2];
 
-    // backRight.driveSpeedMotor(backRightSpeed*0.3);
-    // new TurnToAngle(backRightAngle, backRight).schedule();
+    // Calculate the omega components
+    double omegaL2 = scaledOmega * (L / 2);
+    double omegaW2 = scaledOmega * (W / 2);
 
-    // backLeft.driveSpeedMotor(backLeftSpeed*0.3);
-    // new TurnToAngle(backLeftAngle, backLeft).schedule();;
+    // Drive equation vectors
+    double A = scaledStrafe - omegaL2;
+    double B = scaledStrafe + omegaL2;
+    double C = scaledForward - omegaW2;
+    double D = scaledForward + omegaW2;    
 
-    // frontRight.driveSpeedMotor(frontRightSpeed*0.3);
-    // new TurnToAngle(frontRightSpeed, frontRight).schedule();;
+    // Calculate wheel speeds
+    double backRightSpeed = Math.sqrt((A * A) + (C * C));
+    double backLeftSpeed = Math.sqrt((A * A) + (D * D));
+    double frontRightSpeed = Math.sqrt((B * B) + (C * C));
+    double frontLeftSpeed = Math.sqrt((B * B) + (D * D));
 
-    // frontLeft.driveSpeedMotor(frontLeftSpeed*0.3);
-    // new TurnToAngle(frontLeftSpeed, frontLeft).schedule();
+    // Normalize the wheel speeds
+    double maxSpeed = Math.max(Math.max(Math.max(Math.abs(backRightSpeed), Math.abs(backLeftSpeed)),
+                                        Math.abs(frontRightSpeed)), Math.abs(frontLeftSpeed));
+    if (maxSpeed > 1) {
+        backRightSpeed /= maxSpeed;
+        backLeftSpeed /= maxSpeed;
+        frontRightSpeed /= maxSpeed;
+        frontLeftSpeed /= maxSpeed;
+    }    
 
-    if (slowMode2) {
+    // Calculate wheel angles
+    double backRightAngle = Math.atan2(A, C) * 180 / Math.PI;
+    double backLeftAngle = Math.atan2(A, D) * 180 / Math.PI;
+    double frontRightAngle = Math.atan2(B, C) * 180 / Math.PI;
+    double frontLeftAngle = Math.atan2(B, D) * 180 / Math.PI;
+
+    if (slowMode) {
       optimizeDrive(backRight, backRightSpeed * 0.2, backRightAngle);
       optimizeDrive(backLeft, backLeftSpeed * 0.2, backLeftAngle);
       optimizeDrive(frontRight, frontRightSpeed * 0.2, frontRightAngle);
